@@ -95,18 +95,34 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 #
-# PostgreSQL configuration is driven by environment variables:
-#   DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
-# Defaults target the inventario_db PostgreSQL container running on localhost:5000.
+# PostgreSQL configuration is primarily driven by the inventario_db container
+# environment variables:
+#   POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_URL,
+#   POSTGRES_HOST, POSTGRES_PORT
+#
+# For backwards-compatibility, DB_NAME, DB_USER, DB_PASSWORD, DB_HOST and
+# DB_PORT are also honored as fallbacks.
+#
+# Defaults target the inventario_db PostgreSQL container running on
+# localhost:5000 with database "myapp" and user "appuser".
+
+DB_NAME = os.environ.get("POSTGRES_DB") or os.environ.get("DB_NAME", "myapp")
+DB_USER = os.environ.get("POSTGRES_USER") or os.environ.get("DB_USER", "appuser")
+DB_PASSWORD = os.environ.get("POSTGRES_PASSWORD") or os.environ.get(
+    "DB_PASSWORD",
+    "dbuser123",
+)
+DB_HOST = os.environ.get("POSTGRES_HOST") or os.environ.get("DB_HOST", "localhost")
+DB_PORT = os.environ.get("POSTGRES_PORT") or os.environ.get("DB_PORT", "5000")
 
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("DB_NAME", "myapp"),
-        "USER": os.environ.get("DB_USER", "appuser"),
-        "PASSWORD": os.environ.get("DB_PASSWORD", "dbuser123"),
-        "HOST": os.environ.get("DB_HOST", "localhost"),
-        "PORT": os.environ.get("DB_PORT", "5000"),
+        "NAME": DB_NAME,
+        "USER": DB_USER,
+        "PASSWORD": DB_PASSWORD,
+        "HOST": DB_HOST,
+        "PORT": DB_PORT,
     }
 }
 
