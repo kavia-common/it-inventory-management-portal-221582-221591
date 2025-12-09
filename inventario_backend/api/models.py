@@ -2,7 +2,8 @@
 Database models for the api app.
 
 This module defines the core inventory domain models used by the backend:
-locations, categories, inventory items, movements, procedures, and alerts.
+locations, categories, inventory items, movements, procedures, alerts and
+user profiles for role-based access control.
 """
 
 from django.conf import settings
@@ -134,7 +135,7 @@ class InventoryItem(TimestampedModel):
         default=STATUS_IN_STOCK,
     )
     location = models.ForeignKey(
-        Location,
+        "Location",
         on_delete=models.PROTECT,
         related_name="items",
         null=True,
@@ -317,3 +318,43 @@ class Alert(TimestampedModel):
     def __str__(self) -> str:
         """Return a human-readable representation for admin and debugging."""
         return f"[{self.level}] {self.message}"
+
+
+# PUBLIC_INTERFACE
+class UserProfile(models.Model):
+    """
+    Profile for a Django auth user, storing the inventory role.
+
+    This model is used for role-based access control in the API.
+    """
+
+    ROLE_ADMIN = "admin"
+    ROLE_MANAGER = "manager"
+    ROLE_VIEWER = "viewer"
+    ROLE_TECHNICIAN = "technician"
+
+    ROLE_CHOICES = [
+        (ROLE_ADMIN, "Admin"),
+        (ROLE_MANAGER, "Manager"),
+        (ROLE_VIEWER, "Viewer"),
+        (ROLE_TECHNICIAN, "Technician"),
+    ]
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="profile",
+    )
+    role = models.CharField(
+        max_length=32,
+        choices=ROLE_CHOICES,
+        default=ROLE_VIEWER,
+    )
+
+    class Meta:
+        verbose_name = "User profile"
+        verbose_name_plural = "User profiles"
+
+    def __str__(self) -> str:
+        """Return a human-readable representation for admin and debugging."""
+        return f"{self.user.username} ({self.role})"

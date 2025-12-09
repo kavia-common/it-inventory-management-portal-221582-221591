@@ -5,16 +5,23 @@ This module exposes:
 - a simple health check endpoint
 - viewsets for locations, categories, inventory items, movements,
   procedures, and alerts.
+- authentication-related endpoints for user registration and profile
+  inspection (role-based access built on JWT).
 """
 
+from django.contrib.auth import get_user_model
 from django.db import models
 from django.utils import timezone
-from rest_framework import mixins, status, viewsets
+from rest_framework import generics, mixins, permissions, status, viewsets
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .models import Alert, Category, InventoryItem, Location, Movement, Procedure
-from .permissions import IsInventoryAdmin, IsInventoryAdminOrReadOnly
+from .permissions import (
+    IsAdminOrManagerRole,
+    IsInventoryAdmin,
+    IsInventoryAdminOrReadOnly,
+)
 from .serializers import (
     AlertSerializer,
     CategorySerializer,
@@ -23,8 +30,12 @@ from .serializers import (
     LocationSerializer,
     MovementSerializer,
     ProcedureSerializer,
+    UserRegistrationSerializer,
+    UserSerializer,
 )
 from .services import register_movement
+
+User = get_user_model()
 
 
 @api_view(["GET"])
@@ -165,7 +176,12 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
 
 
 # PUBLIC_INTERFACE
-class MovementViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):
+class MovementViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+):
     """
     ViewSet for tracking movements in the inventory.
 
@@ -349,3 +365,53 @@ class AdminOnlyMetricsViewSet(
             "message": "Metrics endpoint not yet implemented.",
         }
         return Response(data)
+
+
+# PUBLIC_INTERFACE
+class RegisterUserView(generics.CreateAPIView):
+    """
+    Endpoint for registering new users with a specific inventory role.
+
+    This endpoint is mounted at /api/auth/register and requires the caller
+    to be authenticated with a role of admin or manager (or staff/superuser).
+
+    Request body:
+        - username (string, required)
+        - password (string, required, write-only)
+        - email (string, optional)
+        - first_name (string, optional)
+        - last_name (string, optional)
+        - role (one of: admin, manager, viewer, technician)
+
+    Response:
+        201 Created with the created user data (without password),
+        including the assigned profile role.
+    """
+
+    serializer_class = UserRegistrationSerializer
+    permission_classes = [IsAdminOrManagerRole]
+
+
+# PUBLIC_INTERFACE
+class MeView(generics.RetrieveAPIView):
+    """
+    Endpoint returning the current authenticated user's data and profile role.
+
+    This endpoint is mounted at /api/auth/me and requires a valid JWT or
+    authenticated session.
+
+    Response:
+        200 OK with a JSON representation of the current user, including:
+        - id, username, first_name, last_name, email
+        - is_active, is_staff, is_superuser
+        - profile: { role }
+    """
+
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        """
+        Return the currently authenticated user instance.
+        """
+        return self.request.user

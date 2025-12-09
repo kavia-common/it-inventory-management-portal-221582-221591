@@ -4,6 +4,7 @@ Serializers for the inventory API.
 These map Django models to JSON representations used by the REST API.
 """
 
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -14,7 +15,10 @@ from .models import (
     Location,
     Movement,
     Procedure,
+    UserProfile,
 )
+
+User = get_user_model()
 
 
 # PUBLIC_INTERFACE
@@ -250,3 +254,96 @@ class AlertSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at", "is_auto"]
+
+
+# PUBLIC_INTERFACE
+class UserProfileSerializer(serializers.ModelSerializer):
+    """
+    Serializer for the UserProfile model.
+
+    Exposes the role field used for role-based access control.
+    """
+
+    class Meta:
+        model = UserProfile
+        fields = ["role"]
+
+
+# PUBLIC_INTERFACE
+class UserSerializer(serializers.ModelSerializer):
+    """
+    Read-only serializer for the Django user including inventory profile role.
+
+    Used primarily by the /auth/me endpoint.
+    """
+
+    profile = UserProfileSerializer(read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "first_name",
+            "last_name",
+            "email",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+            "profile",
+        ]
+        read_only_fields = [
+            "id",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+            "profile",
+        ]
+
+
+# PUBLIC_INTERFACE
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    """
+    Serializer for registering a new user together with an inventory role.
+
+    This is used by the /api/auth/register endpoint and is restricted
+    to admin/manager users.
+    """
+
+    password = serializers.CharField(
+        write_only=True,
+        min_length=8,
+        help_text="Password for the new user (not returned in responses).",
+    )
+    role = serializers.ChoiceField(
+        choices=UserProfile.ROLE_CHOICES,
+        write_only=True,
+        help_text="Inventory role for the new user.",
+    )
+    profile = UserProfileSerializer(read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "first_name",
+            "last_name",
+            "email",
+            "password",
+            "role",
+            "profile",
+        ]
+        read_only_fields = ["id", "profile"]
+
+    def create(self, validated_data):
+        """
+        Create a new user and associated UserProfile with the provided role.
+        """
+        role = validated_data.pop("role")
+        password = validated_data.pop("password")
+
+        user = User.objects.create_user(**validated_data, password=password)
+        UserProfile.objects.create(user=user, role=role)
+
+        return user
